@@ -1,0 +1,129 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  margin: 0;
+  color: #172026;
+  background: #f7f8f5;
+  font: 13px/1.4 "Segoe UI", sans-serif;
+}
+
+main {
+  padding: 14px;
+}
+
+header,
+footer,
+.suggestion-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+section {
+  margin-top: 14px;
+}
+
+label {
+  display: block;
+  margin-bottom: 9px;
+  color: #40505a;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+}
+
+input,
+textarea {
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid #c9d1ca;
+  border-radius: 6px;
+  padding: 8px;
+  color: #172026;
+  background: #fff;
+  font: inherit;
+}
+
+textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+button {
+  border: 1px solid #1f6f5b;
+  border-radius: 6px;
+  padding: 7px 10px;
+  color: #fff;
+  background: #1f6f5b;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover {
+  background: #185747;
+}
+
+footer button:last-child,
+.suggestion-title button {
+  color: #1f6f5b;
+  background: #fff;
+}
+
+.status,
+.suggestion,
+.debug,
+.auto-detect {
+  border-top: 1px solid #dce2dc;
+  padding-top: 12px;
+}
+
+.status p {
+  margin: 5px 0 0;
+  color: #5a6a72;
+}
+
+.debug-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.debug-actions button,
+.row-actions button {
+  padding: 5px 8px;
+  color: #1f6f5b;
+  background: #fff;
+}
+
+#debugLogs,
+#detectPreview {
+  max-height: 180px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding: 8px;
+  border: 1px solid #c9d1ca;
+  border-radius: 6px;
+  color: #26343b;
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 11px/1.45 Consolas, "Courier New", monospace;
+}
+
+#detectPreview {
+  max-height: 140px;
+}

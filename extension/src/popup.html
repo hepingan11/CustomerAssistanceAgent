@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>客服辅助 AI</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>客服辅助 AI</h1>
+        <label class="switch">
+          <input id="enabled" type="checkbox" />
+          <span>启用捕捉</span>
+        </label>
+      </header>
+
+      <section>
+        <label>后端 API 地址<input id="apiBaseUrl" placeholder="http://localhost:8000" /></label>
+        <label>API Key<input id="apiKey" placeholder="dev-api-key" /></label>
+      </section>
+
+      <section class="auto-detect">
+        <strong>AI 自动定位元素</strong>
+        <label>页面中一段真实消息文本<input id="sampleText" placeholder="粘贴一段当前页面里存在的消息文本" /></label>
+        <div class="row-actions">
+          <button id="autoDetect" type="button">自动定位并填入</button>
+          <button id="reviewSelectors" type="button">AI 检查 selector</button>
+        </div>
+        <pre id="detectPreview">输入消息文本后可自动推断 selector</pre>
+      </section>
+
+      <section>
+        <label>聊天消息容器 selector<input id="containerSelector" placeholder=".chat-list" /></label>
+        <label>单条消息 selector<input id="messageSelector" placeholder=".message" /></label>
+        <label>消息文本 selector<input id="textSelector" placeholder=".message-text" /></label>
+        <label>发送人 selector（可选）<input id="senderSelector" placeholder=".sender" /></label>
+        <label>时间 selector（可选）<input id="timeSelector" placeholder=".time" /></label>
+      </section>
+
+      <section class="status">
+        <strong>当前状态</strong>
+        <p id="captureStatus">读取中...</p>
+      </section>
+
+      <section class="suggestion">
+        <div class="suggestion-title">
+          <strong>最近 AI 建议</strong>
+          <button id="copySuggestion" type="button">复制</button>
+        </div>
+        <textarea id="suggestionText" readonly placeholder="捕捉到客户消息后会显示建议"></textarea>
+      </section>
+
+      <section class="debug">
+        <div class="suggestion-title">
+          <strong>调试日志</strong>
+          <div class="debug-actions">
+            <button id="refreshLogs" type="button">刷新</button>
+            <button id="clearLogs" type="button">清空</button>
+          </div>
+        </div>
+        <pre id="debugLogs">暂无日志</pre>
+      </section>
+
+      <footer>
+        <button id="save" type="button">保存并重新捕捉</button>
+        <button id="refresh" type="button">刷新状态</button>
+      </footer>
+    </main>
+    <script src="./popup.js"></script>
+  </body>
+</html>
