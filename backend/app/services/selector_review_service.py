@@ -47,16 +47,53 @@ def heuristic_review(payload: SelectorReviewRequest) -> SelectorReviewResponse:
 
 
 def build_prompt(payload: SelectorReviewRequest) -> str:
-    compact = json.dumps(payload.model_dump(), ensure_ascii=False, indent=2)[:18000]
-    return (
-        "You are a browser-extension DOM selector review agent. Review whether the selectors reliably capture "
-        "chat or comment messages. Prefer reusable selectors over unique ids. Use the current logged-in page evidence "
-        "provided by the extension; do not ask for cookies or credentials.\n\n"
-        "Return strict JSON with keys: summary, recommended_selectors, issues, confidence. "
-        "recommended_selectors must include containerSelector, messageSelector, textSelector, senderSelector, timeSelector. "
-        "confidence must be a number between 0 and 1.\n\n"
-        f"Evidence:\n{compact}"
+    # Feed the actual page HTML (compact) plus the sample text to the LLM so it can
+    # locate the right elements and emit structured selectors. Fall back to the
+    # JSON evidence summary when page_html is unavailable.
+    page_html = (payload.page_html or "").strip()
+    sample_text = (payload.sample_text or "").strip()
+    current = json.dumps(payload.selectors or {}, ensure_ascii=False, indent=2)
+    nl = chr(10)
+
+    if page_html:
+        html_blob = page_html[:60000]
+        sample_block = (
+            "User-provided sample message text (a real piece of text that appears inside one message on the page):"
+            + nl + sample_text + nl + nl
+        ) if sample_text else ""
+        evidence = (
+            "Current selectors being reviewed:" + nl + current + nl + nl
+            + sample_block
+            + "Page HTML (compact, may be truncated):" + nl + html_blob + nl + nl
+            + "Page URL: " + (payload.page_url or "") + nl
+            + "Page title: " + (payload.title or "")
+        )
+        instruction = (
+            "You are a browser-extension DOM selector agent. The user has pasted a snippet of real message text that "
+            "exists on the current page, and the full (compact) page HTML is provided below. Your job is to locate, "
+            "INSIDE that HTML, the DOM elements that represent: (1) the chat/message list container, (2) a single "
+            "repeated message row, (3) the message body text, (4) the sender name, and (5) the timestamp. "
+            "Derive reusable CSS selectors (prefer tag.class over unique ids; selectors must match multiple message rows). "
+            "The container selector must be resolvable by document.querySelector; the message selector by container.querySelector; "
+            "text/sender/time selectors by message.querySelector. Use the sample text to anchor which element holds the message body. "
+            "Do NOT ask for cookies or credentials; everything you need is in the HTML below."
+        )
+    else:
+        compact = json.dumps(payload.model_dump(), ensure_ascii=False, indent=2)[:18000]
+        evidence = "Evidence:" + nl + compact
+        instruction = (
+            "You are a browser-extension DOM selector review agent. Review whether the selectors reliably capture "
+            "chat or comment messages. Prefer reusable selectors over unique ids. Use the current logged-in page evidence "
+            "provided by the extension; do not ask for cookies or credentials."
+        )
+
+    footer = (
+        "Return STRICT JSON ONLY (no markdown, no code fences) with exactly these keys: "
+        "summary (string), recommended_selectors (object with keys containerSelector, messageSelector, "
+        "textSelector, senderSelector, timeSelector - all strings, empty string if not found), "
+        "issues (array of strings), confidence (number between 0 and 1)."
     )
+    return instruction + nl + nl + footer + nl + nl + evidence
 
 
 def review_selectors(payload: SelectorReviewRequest) -> SelectorReviewResponse:

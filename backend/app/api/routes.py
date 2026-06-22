@@ -74,6 +74,7 @@ def get_latest_suggestion(
         id=suggestion.id,
         conversation_id=suggestion.conversation_id,
         content=suggestion.content,
+        options=suggestion.raw_payload.get("options") if isinstance(suggestion.raw_payload, dict) else [],
         status=suggestion.status,
         created_at=suggestion.created_at,
     )

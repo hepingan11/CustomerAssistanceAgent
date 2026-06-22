@@ -21,13 +21,22 @@ def _resolve_budget(context_budget: int | None) -> int:
 
 
 def build_prompt(messages: list[Message], chunks: list[KnowledgeChunk]) -> str:
-    context = "\n".join(f"{m.sender_type}({m.sender_name or 'unknown'}): {m.content}" for m in messages)
-    knowledge = "\n\n".join(f"[知识片段 {i + 1}]\n{chunk.content}" for i, chunk in enumerate(chunks))
-    return (
-        "请基于企业知识库和最近对话，生成一段客服可复制的回复建议。"
-        "不要声称已经执行了尚未完成的操作，不要自动代替客服发送。\n\n"
-        f"最近对话：\n{context}\n\n相关知识：\n{knowledge or '暂无命中知识片段'}"
-    )
+    nl = chr(10)
+    context = nl.join(f"{m.sender_type}({m.sender_name or 'unknown'}): {m.content}" for m in messages)
+    knowledge = (nl + nl).join(f"[知识片段 {i + 1}]{nl}{chunk.content}" for i, chunk in enumerate(chunks))
+    parts = [
+        "你是一名客服助手。请基于企业知识库和最近对话，给出 2 到 3 条可直接复制的回复建议，供客服挑选后发送给客户。",
+        "要求：",
+        "- 每条建议独立、可单独使用，语气礼貌专业；",
+        "- 不同建议覆盖不同的处理方向或话术风格（例如直接答复、安抚追问、引导补充信息）；",
+        "- 不要声称已经执行了尚未完成的操作，不要代替客服自动发送；",
+        "- 仅依据下方知识库内容作答，知识库未覆盖时如实说明并建议人工跟进。",
+        '严格返回 JSON 对象，不要 markdown 代码块，格式为：{"options": ["回复建议1", "回复建议2", "回复建议3"]}',
+        "（options 数组长度为 2 到 3，每条为一段可直接发送的中文文本）。",
+    ]
+    intro = nl.join(parts) + nl + nl
+    body = f"最近对话：{nl}{context}{nl}{nl}相关知识：{nl}{knowledge or '暂无命中知识片段'}"
+    return intro + body
 
 
 def retrieve_chunks(db: Session, organization_id: int, query: str, limit: int = 5) -> list[KnowledgeChunk]:
@@ -146,6 +155,7 @@ def generate_suggestion(
     trigger_message_id: int,
     context_budget: int | None = None,
 ) -> AISuggestion:
+    import json as _json
     conversation = db.get(Conversation, conversation_id)
     trigger = db.get(Message, trigger_message_id)
     if conversation is None or trigger is None:
@@ -165,7 +175,34 @@ def generate_suggestion(
     kept_messages, kept_chunks = trim_to_budget(recent_messages, chunks, budget)
     prompt = build_prompt(kept_messages, kept_chunks)
     llm = get_llm_provider()
-    content = llm.generate(prompt)
+    raw = llm.generate(prompt)
+
+    # 解析 2-3 条候选建议；解析失败时降级为单条原文。
+    options: list[str] = []
+    parse_error: str | None = None
+    try:
+        parsed = _json.loads(raw)
+        opts = parsed.get("options") if isinstance(parsed, dict) else None
+        if isinstance(opts, list):
+            options = [str(o).strip() for o in opts if str(o).strip()]
+    except _json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                parsed = _json.loads(raw[start:end + 1])
+                opts = parsed.get("options") if isinstance(parsed, dict) else None
+                if isinstance(opts, list):
+                    options = [str(o).strip() for o in opts if str(o).strip()]
+            except _json.JSONDecodeError as exc:
+                parse_error = str(exc)
+        else:
+            parse_error = "no JSON object found"
+
+    if not options:
+        options = [raw.strip()] if raw.strip() else []
+    content = options[0] if options else ""
+
     suggestion = AISuggestion(
         conversation_id=conversation_id,
         trigger_message_id=trigger_message_id,
@@ -173,10 +210,12 @@ def generate_suggestion(
         model=llm.model_name,
         status="ready",
         raw_payload={
+            "options": options,
             "chunk_ids": [chunk.id for chunk in kept_chunks],
             "context_budget": budget,
             "used_messages": len(kept_messages),
             "used_chunks": len(kept_chunks),
+            "parse_error": parse_error,
         },
     )
     db.add(suggestion)
