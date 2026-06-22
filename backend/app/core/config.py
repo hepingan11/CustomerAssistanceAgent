@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1536
     default_api_key: str = "dev-api-key"
     recent_message_limit: int = 12
+    # 上下文 token 预算上限(单位:字符,近似 token 估算)。前端可选 256k/512k/1M。
+    default_context_budget: int = 256 * 1024
+    max_context_budget: int = 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

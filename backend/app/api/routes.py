@@ -8,6 +8,7 @@ from app.models import AISuggestion, Conversation, KnowledgeDocument, Organizati
 from app.schemas.api import (
     ConversationCreate,
     ConversationRead,
+    ContextPreviewResponse,
     KnowledgeDocumentRead,
     MessageCreate,
     MessageRead,
@@ -18,6 +19,7 @@ from app.schemas.api import (
 )
 from app.services.knowledge_service import create_document, list_documents
 from app.services.message_service import create_message, get_or_create_conversation
+from app.services.rag_service import build_context_preview
 from app.services.selector_review_service import review_selectors
 from app.workers.tasks import generate_ai_suggestion, process_knowledge_document
 
@@ -42,9 +44,13 @@ def receive_message(
     conversation = db.get(Conversation, payload.conversation_id)
     if conversation is None or conversation.organization_id != organization.id:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    message, duplicate = create_message(db, **payload.model_dump())
+    message, duplicate = create_message(db, **payload.model_dump(exclude={"context_budget"}))
     if not duplicate and payload.sender_type in {"customer", "unknown"}:
-        generate_ai_suggestion.delay(payload.conversation_id, message.id)
+        generate_ai_suggestion.delay(
+            payload.conversation_id,
+            message.id,
+            payload.context_budget,
+        )
     return MessageRead.model_validate(message).model_copy(update={"duplicate": duplicate})
 
 
@@ -70,6 +76,47 @@ def get_latest_suggestion(
         content=suggestion.content,
         status=suggestion.status,
         created_at=suggestion.created_at,
+    )
+
+
+@router.get("/conversations/{conversation_id}/context-preview", response_model=ContextPreviewResponse)
+def context_preview(
+    conversation_id: int,
+    budget: int | None = None,
+    db: Session = Depends(get_db),
+    organization: Organization = Depends(get_current_organization),
+) -> ContextPreviewResponse:
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None or conversation.organization_id != organization.id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    try:
+        data = build_context_preview(db, conversation_id, budget)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return ContextPreviewResponse(
+        conversation_id=data["conversation_id"],
+        budget=data["budget"],
+        used_tokens=data["used_tokens"],
+        total_messages=data["total_messages"],
+        kept_messages=data["kept_messages"],
+        total_chunks=data["total_chunks"],
+        kept_chunks=data["kept_chunks"],
+        messages=[
+            {
+                "id": m.id,
+                "sender_type": m.sender_type,
+                "sender_name": m.sender_name,
+                "content": m.content,
+                "created_at": m.created_at,
+            }
+            for m in data["messages"]
+        ],
+        chunks=[
+            {"id": c.id, "content": c.content, "score": None}
+            for c in data["chunks"]
+        ],
+        prompt=data["prompt"],
+        chunk_error=data.get("chunk_error"),
     )
 
 

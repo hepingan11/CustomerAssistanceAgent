@@ -31,9 +31,13 @@ def process_knowledge_document(document_id: int) -> None:
 
 
 @celery_app.task(name="generate_ai_suggestion")
-def generate_ai_suggestion(conversation_id: int, trigger_message_id: int) -> None:
+def generate_ai_suggestion(
+    conversation_id: int,
+    trigger_message_id: int,
+    context_budget: int | None = None,
+) -> None:
     db = SessionLocal()
     try:
-        generate_suggestion(db, conversation_id, trigger_message_id)
+        generate_suggestion(db, conversation_id, trigger_message_id, context_budget)
     finally:
         db.close()

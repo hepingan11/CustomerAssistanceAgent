@@ -28,6 +28,17 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
             input=text[:8000],
             dimensions=settings.embedding_dimensions,
         )
+        # 兼容部分代理/自建服务返回非标准结构的情况,给出清晰错误而非 AttributeError。
+        if isinstance(response, str):
+            raise RuntimeError(
+                f"Embedding API returned a plain string instead of an embedding object. "
+                f"Check openai_base_url/openai_embedding_model config. Response preview: {response[:200]}"
+            )
+        if not getattr(response, "data", None):
+            raise RuntimeError(
+                f"Embedding API returned an object without 'data' field. "
+                f"Type={type(response).__name__}, preview={str(response)[:200]}"
+            )
         return response.data[0].embedding
 
 

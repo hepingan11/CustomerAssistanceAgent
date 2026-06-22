@@ -19,16 +19,47 @@
       <section>
         <label>后端 API 地址<input id="apiBaseUrl" placeholder="http://localhost:8000" /></label>
         <label>API Key<input id="apiKey" placeholder="dev-api-key" /></label>
+        <label>上下文数量上限
+          <select id="contextBudget">
+            <option value="262144">256k</option>
+            <option value="524288">512k</option>
+            <option value="1048576">1M</option>
+          </select>
+        </label>
       </section>
 
       <section class="auto-detect">
         <strong>AI 自动定位元素</strong>
-        <label>页面中一段真实消息文本<input id="sampleText" placeholder="粘贴一段当前页面里存在的消息文本" /></label>
+        <label>
+          定位类型
+          <select id="detectMode">
+            <option value="message">消息文本</option>
+            <option value="sender">发送人</option>
+            <option value="time">时间</option>
+          </select>
+        </label>
+        <label>页面中对应的一段真实文本<input id="sampleText" placeholder="例如：消息正文、昵称、42min ago" /></label>
         <div class="row-actions">
-          <button id="autoDetect" type="button">自动定位并填入</button>
+          <button id="autoDetect" type="button">定位并填入</button>
           <button id="reviewSelectors" type="button">AI 检查 selector</button>
         </div>
-        <pre id="detectPreview">输入消息文本后可自动推断 selector</pre>
+        <pre id="detectPreview">选择定位类型后，输入页面中真实存在的一段文本</pre>
+      </section>
+
+      <section class="site-config">
+        <strong>按站点保存定位元素</strong>
+        <label>当前页面 URL
+          <input id="siteUrl" type="url" placeholder="https://www.example.com/im" />
+        </label>
+        <p id="siteMatchHint" class="site-hint">读取中...</p>
+        <div class="row-actions">
+          <button id="saveSite" type="button">保存当前站点配置</button>
+          <button id="deleteSite" type="button">删除当前站点配置</button>
+        </div>
+        <details>
+          <summary>已保存的站点列表</summary>
+          <ul id="siteList"></ul>
+        </details>
       </section>
 
       <section>
@@ -42,6 +73,16 @@
       <section class="status">
         <strong>当前状态</strong>
         <p id="captureStatus">读取中...</p>
+        <button id="previewContext" type="button">查看捕捉内容预览</button>
+      </section>
+
+      <section id="contextPreview" class="context-preview" hidden>
+        <div class="suggestion-title">
+          <strong>上下文预览</strong>
+          <button id="closePreview" type="button">关闭</button>
+        </div>
+        <p id="previewStats" class="preview-stats"></p>
+        <pre id="previewContent" class="preview-content"></pre>
       </section>
 
       <section class="suggestion">

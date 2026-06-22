@@ -30,6 +30,8 @@ class MessageCreate(BaseModel):
     source: str = "browser_extension"
     source_message_id: str | None = None
     raw_payload: dict[str, Any] = Field(default_factory=dict)
+    # 上下文 token 预算上限(字符数近似)。None 表示用后端默认值。
+    context_budget: int | None = None
 
 
 class MessageRead(BaseModel):
@@ -51,6 +53,34 @@ class SuggestionRead(BaseModel):
     content: str | None = None
     status: str
     created_at: datetime | None = None
+
+
+class ContextPreviewMessage(BaseModel):
+    id: int
+    sender_type: str
+    sender_name: str | None
+    content: str
+    created_at: datetime
+
+
+class ContextPreviewChunk(BaseModel):
+    id: int
+    content: str
+    score: float | None = None
+
+
+class ContextPreviewResponse(BaseModel):
+    conversation_id: int
+    budget: int
+    used_tokens: int
+    total_messages: int
+    kept_messages: int
+    total_chunks: int
+    kept_chunks: int
+    messages: list[ContextPreviewMessage]
+    chunks: list[ContextPreviewChunk]
+    prompt: str
+    chunk_error: str | None = None
 
 
 class KnowledgeDocumentRead(BaseModel):
