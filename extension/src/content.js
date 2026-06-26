@@ -492,6 +492,23 @@ function summarizeElement(el) {
   };
 }
 
+function collectPageDom() {
+  // Build a compact representation of the current page so the AI can locate
+  // message elements by structure instead of guessing from summaries.
+  const root = document.body ? document.body.cloneNode(true) : document.documentElement.cloneNode(true);
+  // Strip nodes that carry no useful layout/text signal for selector inference.
+  root.querySelectorAll("script, style, noscript, iframe, svg, canvas, link, meta, template").forEach((n) => n.remove());
+  // Drop comments and collapse whitespace nodes.
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT, null);
+  const comments = [];
+  while (walker.nextNode()) comments.push(walker.currentNode);
+  comments.forEach((c) => c.parentNode && c.parentNode.removeChild(c));
+  let html = root.outerHTML || "";
+  // Collapse runs of whitespace inside text so the payload stays compact.
+  html = html.replace(/\s{2,}/g, " ").replace(/>\s+</g, "><").trim();
+  return html;
+}
+
 function collectSelectorStats(selectors) {
   const containers = selectors.containerSelector ? Array.from(document.querySelectorAll(selectors.containerSelector)) : [];
   const container = containers[0] || null;
@@ -610,7 +627,8 @@ async function collectReviewContext(sampleText = "") {
     selector_stats: collected.selector_stats,
     extraction_preview: collected.extraction_preview,
     dom_summary: collected.dom_summary,
-    auto_detect_result: autoDetectResult
+    auto_detect_result: autoDetectResult,
+    page_html: collectPageDom()
   };
   await addLog("info", "Collected selector review context", {
     stats: collected.selector_stats,

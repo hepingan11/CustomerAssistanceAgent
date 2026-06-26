@@ -51,6 +51,7 @@ class SuggestionRead(BaseModel):
     id: int | None = None
     conversation_id: int
     content: str | None = None
+    options: list[str] = Field(default_factory=list)
     status: str
     created_at: datetime | None = None
 
@@ -107,6 +108,7 @@ class SelectorReviewRequest(BaseModel):
     extraction_preview: list[dict[str, Any]] = Field(default_factory=list)
     dom_summary: list[dict[str, Any]] = Field(default_factory=list)
     auto_detect_result: dict[str, Any] | None = None
+    page_html: str | None = None
 
 
 class SelectorReviewResponse(BaseModel):

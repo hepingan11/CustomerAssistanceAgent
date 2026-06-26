@@ -9,104 +9,144 @@
   <body>
     <main>
       <header>
-        <h1>客服辅助 AI</h1>
+        <div class="brand">
+          <span class="brand-mark">AI</span>
+          <h1>客服辅助</h1>
+        </div>
         <label class="switch">
           <input id="enabled" type="checkbox" />
-          <span>启用捕捉</span>
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+          <span class="switch-label">启用捕捉</span>
         </label>
       </header>
 
-      <section>
-        <label>后端 API 地址<input id="apiBaseUrl" placeholder="http://localhost:8000" /></label>
-        <label>API Key<input id="apiKey" placeholder="dev-api-key" /></label>
-        <label>上下文数量上限
-          <select id="contextBudget">
-            <option value="262144">256k</option>
-            <option value="524288">512k</option>
-            <option value="1048576">1M</option>
-          </select>
-        </label>
-      </section>
-
-      <section class="auto-detect">
-        <strong>AI 自动定位元素</strong>
-        <label>
-          定位类型
-          <select id="detectMode">
-            <option value="message">消息文本</option>
-            <option value="sender">发送人</option>
-            <option value="time">时间</option>
-          </select>
-        </label>
-        <label>页面中对应的一段真实文本<input id="sampleText" placeholder="例如：消息正文、昵称、42min ago" /></label>
-        <div class="row-actions">
-          <button id="autoDetect" type="button">定位并填入</button>
-          <button id="reviewSelectors" type="button">AI 检查 selector</button>
-        </div>
-        <pre id="detectPreview">选择定位类型后，输入页面中真实存在的一段文本</pre>
-      </section>
-
-      <section class="site-config">
-        <strong>按站点保存定位元素</strong>
-        <label>当前页面 URL
-          <input id="siteUrl" type="url" placeholder="https://www.example.com/im" />
-        </label>
-        <p id="siteMatchHint" class="site-hint">读取中...</p>
-        <div class="row-actions">
-          <button id="saveSite" type="button">保存当前站点配置</button>
-          <button id="deleteSite" type="button">删除当前站点配置</button>
-        </div>
-        <details>
-          <summary>已保存的站点列表</summary>
-          <ul id="siteList"></ul>
-        </details>
-      </section>
-
-      <section>
-        <label>聊天消息容器 selector<input id="containerSelector" placeholder=".chat-list" /></label>
-        <label>单条消息 selector<input id="messageSelector" placeholder=".message" /></label>
-        <label>消息文本 selector<input id="textSelector" placeholder=".message-text" /></label>
-        <label>发送人 selector（可选）<input id="senderSelector" placeholder=".sender" /></label>
-        <label>时间 selector（可选）<input id="timeSelector" placeholder=".time" /></label>
-      </section>
-
       <section class="status">
-        <strong>当前状态</strong>
-        <p id="captureStatus">读取中...</p>
-        <button id="previewContext" type="button">查看捕捉内容预览</button>
+        <div class="status-head">
+          <strong>当前状态</strong>
+          <span id="captureStatus" class="status-badge">读取中...</span>
+        </div>
+        <button id="previewContext" type="button" class="btn-ghost">查看捕捉内容预览</button>
       </section>
 
       <section id="contextPreview" class="context-preview" hidden>
-        <div class="suggestion-title">
+        <div class="panel-title">
           <strong>上下文预览</strong>
-          <button id="closePreview" type="button">关闭</button>
+          <button id="closePreview" type="button" class="btn-ghost btn-sm">关闭</button>
         </div>
         <p id="previewStats" class="preview-stats"></p>
         <pre id="previewContent" class="preview-content"></pre>
       </section>
 
-      <section class="suggestion">
-        <div class="suggestion-title">
+      <section class="suggestion card">
+        <div class="panel-title">
           <strong>最近 AI 建议</strong>
-          <button id="copySuggestion" type="button">复制</button>
+          <button id="refreshSuggestion" type="button" class="btn-ghost btn-sm">刷新</button>
         </div>
-        <textarea id="suggestionText" readonly placeholder="捕捉到客户消息后会显示建议"></textarea>
+        <div id="suggestionList" class="suggestion-list">
+          <p class="suggestion-empty">捕捉到客户消息后会显示 2-3 条候选回复</p>
+        </div>
+        <textarea id="suggestionText" hidden readonly placeholder="捕捉到客户消息后会显示建议"></textarea>
       </section>
 
-      <section class="debug">
-        <div class="suggestion-title">
-          <strong>调试日志</strong>
-          <div class="debug-actions">
-            <button id="refreshLogs" type="button">刷新</button>
-            <button id="clearLogs" type="button">清空</button>
-          </div>
+      <section class="auto-detect card">
+        <strong class="card-title">AI 自动定位元素</strong>
+        <p class="card-hint">输入页面里真实存在的一段文本，让 AI 在整页 HTML 中定位并填入下方 selector。</p>
+        <div class="grid-2">
+          <label>定位类型
+            <select id="detectMode">
+              <option value="message">消息文本</option>
+              <option value="sender">发送人</option>
+              <option value="time">时间</option>
+            </select>
+          </label>
+          <label>页面中对应的一段真实文本<input id="sampleText" placeholder="例如：消息正文、昵称、42min ago" /></label>
         </div>
-        <pre id="debugLogs">暂无日志</pre>
+        <div class="row-actions">
+          <button id="autoDetect" type="button" class="btn-primary">定位并填入</button>
+          <button id="reviewSelectors" type="button" class="btn-secondary">AI 检查 selector</button>
+        </div>
+        <pre id="detectPreview" class="preview-block">选择定位类型后，输入页面中真实存在的一段文本</pre>
       </section>
+
+      <details class="collapsible">
+        <summary>Selector 高级配置</summary>
+        <section class="selectors">
+          <p class="card-hint">通常由 AI 自动定位填入，仅在需要手动校正时编辑。</p>
+          <label>聊天消息容器 selector<input id="containerSelector" placeholder=".chat-list" /></label>
+          <label>单条消息 selector<input id="messageSelector" placeholder=".message" /></label>
+          <label>消息文本 selector<input id="textSelector" placeholder=".message-text" /></label>
+          <label>发送人 selector（可选）<input id="senderSelector" placeholder=".sender" /></label>
+          <label>时间 selector（可选）<input id="timeSelector" placeholder=".time" /></label>
+        </section>
+      </details>
+
+      <details class="collapsible">
+        <summary>按站点保存定位元素</summary>
+        <section class="site-config">
+          <label>当前页面 URL
+            <input id="siteUrl" type="url" placeholder="https://www.example.com/im" />
+          </label>
+          <p id="siteMatchHint" class="site-hint">读取中...</p>
+          <div class="row-actions">
+            <button id="saveSite" type="button" class="btn-primary btn-sm">保存当前站点配置</button>
+            <button id="deleteSite" type="button" class="btn-ghost btn-sm">删除当前站点配置</button>
+          </div>
+          <details class="nested">
+            <summary>已保存的站点列表</summary>
+            <ul id="siteList"></ul>
+          </details>
+        </section>
+      </details>
+
+      <details class="collapsible" open>
+        <summary>知识库</summary>
+        <section class="knowledge">
+          <p class="card-hint">上传 .md 知识库文件，AI 会结合其内容生成回复建议。</p>
+          <label class="upload-row">
+            <input id="knowledgeFile" type="file" accept=".md,.txt" hidden />
+            <span class="btn-primary btn-sm">选择文件并上传</span>
+          </label>
+          <p id="knowledgeUploadHint" class="site-hint"></p>
+          <div class="panel-title knowledge-head">
+            <strong>已上传文档</strong>
+            <button id="refreshKnowledge" type="button" class="btn-ghost btn-sm">刷新</button>
+          </div>
+          <ul id="knowledgeList" class="knowledge-list"><li class="empty">加载中...</li></ul>
+        </section>
+      </details>
+
+      <details class="collapsible">
+        <summary>后端连接配置</summary>
+        <section class="api-config">
+          <label>后端 API 地址<input id="apiBaseUrl" placeholder="http://localhost:8000" /></label>
+          <label>API Key<input id="apiKey" placeholder="dev-api-key" /></label>
+          <label>上下文数量上限
+            <select id="contextBudget">
+              <option value="262144">256k</option>
+              <option value="524288">512k</option>
+              <option value="1048576">1M</option>
+            </select>
+          </label>
+        </section>
+      </details>
+
+      <details class="collapsible">
+        <summary>调试日志</summary>
+        <section class="debug">
+          <div class="panel-title">
+            <strong>调试日志</strong>
+            <div class="debug-actions">
+              <button id="refreshLogs" type="button" class="btn-ghost btn-sm">刷新</button>
+              <button id="clearLogs" type="button" class="btn-ghost btn-sm">清空</button>
+            </div>
+          </div>
+          <pre id="debugLogs">暂无日志</pre>
+        </section>
+      </details>
 
       <footer>
-        <button id="save" type="button">保存并重新捕捉</button>
-        <button id="refresh" type="button">刷新状态</button>
+        <button id="save" type="button" class="btn-primary">保存并重新捕捉</button>
+        <button id="refresh" type="button" class="btn-ghost">刷新状态</button>
       </footer>
     </main>
     <script src="./popup.js"></script>
