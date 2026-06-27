@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld("desktopAgent", {
     get: () => ipcRenderer.invoke("memory:get"),
     reset: () => ipcRenderer.invoke("memory:reset")
   },
+  wechat: {
+    scrollUp: (payload) => ipcRenderer.invoke("wechat:scroll-up", payload)
+  },
   backend: {
     sendMessage: (payload) => ipcRenderer.invoke("backend:send-message", payload),
     getSuggestion: (conversationId) => ipcRenderer.invoke("backend:get-suggestion", conversationId)

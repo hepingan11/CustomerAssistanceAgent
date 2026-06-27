@@ -4,6 +4,7 @@ const { loadSettings, saveSettings } = require("./services/settings-store.cjs");
 const { analyzeFrame } = require("./services/ocr-service.cjs");
 const { mergeMessages, resetMemory, getMemory } = require("./services/conversation-memory.cjs");
 const { createApiClient } = require("./services/backend-client.cjs");
+const { scrollWechatHistory } = require("./services/wechat-scroll-service.cjs");
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 let mainWindow = null;
@@ -87,7 +88,8 @@ ipcMain.handle("capture:analyze-frame", async (_event, payload) => {
     provider: settings.ocrProvider,
     platform: settings.platform,
     sourceName: payload?.sourceName,
-    hasImage: Boolean(payload?.imageDataUrl)
+    hasImage: Boolean(payload?.imageDataUrl),
+    wechatBubbleCount: Array.isArray(payload?.wechatBubbles) ? payload.wechatBubbles.length : 0
   });
 
   try {
@@ -116,6 +118,8 @@ ipcMain.handle("capture:analyze-frame", async (_event, payload) => {
 ipcMain.handle("memory:get", async () => getMemory());
 
 ipcMain.handle("memory:reset", async () => resetMemory());
+
+ipcMain.handle("wechat:scroll-up", async (_event, payload) => scrollWechatHistory(payload));
 
 ipcMain.handle("backend:send-message", async (_event, payload) => {
   const settings = await loadSettings(app.getPath("userData"));

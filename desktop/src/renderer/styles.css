@@ -194,6 +194,10 @@ footer {
   background: #b94b36;
 }
 
+.primaryAction.secondary {
+  background: #3f6f8f;
+}
+
 .ghostButton {
   padding: 0 12px;
   color: #28473c;
@@ -341,7 +345,7 @@ select:focus {
 
 .actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 

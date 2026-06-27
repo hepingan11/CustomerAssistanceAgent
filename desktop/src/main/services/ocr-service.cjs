@@ -174,6 +174,20 @@ function centerX(box) {
   return (Number(box.x1) + Number(box.x2)) / 2;
 }
 
+function boxArea(box) {
+  if (!box) return 0;
+  return Math.max(0, Number(box.x2) - Number(box.x1)) * Math.max(0, Number(box.y2) - Number(box.y1));
+}
+
+function intersectionArea(a, b) {
+  if (!a || !b) return 0;
+  const x1 = Math.max(Number(a.x1), Number(b.x1));
+  const y1 = Math.max(Number(a.y1), Number(b.y1));
+  const x2 = Math.min(Number(a.x2), Number(b.x2));
+  const y2 = Math.min(Number(a.y2), Number(b.y2));
+  return Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+}
+
 function resolveSideThreshold(tokens, positionedBlocks) {
   const textCenters = positionedBlocks
     .filter((block) => block.box && !isTimeLikeText(block.text))
@@ -431,7 +445,7 @@ async function analyzeWithZhipu(payload, settings) {
     throw new Error(`Zhipu OCR failed: ${result.message || text}`);
   }
 
-  const events = parseZhipuWordsResult(result.words_result || [], settings);
+  const events = parseZhipuWordsResult(result.words_result || [], settings, payload);
   const messages = buildMessagesFromEvents(events, payload, settings, "done");
 
   return {
@@ -462,6 +476,101 @@ function zhipuBox(location) {
   return { x1: left, y1: top, x2: left + width, y2: top + height, width, height };
 }
 
+function normalizeWechatBubble(value) {
+  const box = normalizeBox(value?.box || value);
+  if (!box) return null;
+  const senderType = value.senderType === "agent" ? "agent" : "customer";
+  return {
+    ...value,
+    senderType,
+    box,
+    id: value.id || hashText(`${senderType}|${box.x1}|${box.y1}|${box.x2}|${box.y2}`)
+  };
+}
+
+function parseWechatBubbleItems(items, bubbles = []) {
+  const normalizedBubbles = bubbles
+    .map(normalizeWechatBubble)
+    .filter(Boolean)
+    .sort((a, b) => a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1);
+
+  if (normalizedBubbles.length === 0) return parseWechatZhipuItems(items);
+
+  const usableItems = items
+    .filter((item) => item.box)
+    .filter((item) => item.text && !isWechatNoiseText(item.text))
+    .sort((a, b) => a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1);
+
+  const groups = normalizedBubbles.map((bubble) => ({
+    bubble,
+    parts: [],
+    confidence: null
+  }));
+
+  for (const item of usableItems) {
+    if (isTimeLikeText(item.text)) {
+      groups.push({
+        bubble: {
+          senderType: "time",
+          box: item.box,
+          id: hashText(`time|${item.text}|${item.box.y1}`)
+        },
+        parts: [item.text],
+        confidence: item.confidence
+      });
+      continue;
+    }
+
+    let bestGroup = null;
+    let bestScore = 0;
+    for (const group of groups) {
+      if (group.bubble.senderType === "time") continue;
+      const overlap = intersectionArea(item.box, group.bubble.box);
+      const score = overlap / Math.max(1, boxArea(item.box));
+      if (score > bestScore) {
+        bestScore = score;
+        bestGroup = group;
+      }
+    }
+
+    if (bestGroup && bestScore >= 0.18) {
+      bestGroup.parts.push(item);
+      bestGroup.confidence = bestGroup.confidence ?? item.confidence;
+    }
+  }
+
+  return groups
+    .map((group) => {
+      const parts = group.parts
+        .slice()
+        .sort((a, b) => {
+          if (typeof a === "string" || typeof b === "string") return 0;
+          return a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1;
+        })
+        .map((part) => (typeof part === "string" ? part : part.text));
+      const content = cleanTextLine(parts.join(""));
+      if (!content || isImageOrMarkupResidue(content)) return null;
+      const senderType = group.bubble.senderType;
+      return {
+        content,
+        senderType,
+        eventType: senderType === "time" ? "time" : "message",
+        confidence: group.confidence,
+        box: group.bubble.box,
+        debug: {
+          provider: "zhipuocr",
+          platform: "wechat",
+          strategy: "bubble-match",
+          bubbleId: group.bubble.id,
+          bubbleCount: normalizedBubbles.length,
+          positionedBlockCount: usableItems.length
+        }
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1);
+}
+
 function resolveZhipuThreshold(items) {
   const centers = items
     .filter((item) => item.box && !isTimeLikeText(item.text))
@@ -484,7 +593,7 @@ function resolveZhipuThreshold(items) {
   return threshold !== null && bestGap > 60 ? threshold : Number.POSITIVE_INFINITY;
 }
 
-function parseZhipuWordsResult(wordsResult, settings = {}) {
+function parseZhipuWordsResult(wordsResult, settings = {}, payload = {}) {
   const items = wordsResult
     .map((item) => ({
       text: cleanTextLine(item.words),
@@ -494,6 +603,9 @@ function parseZhipuWordsResult(wordsResult, settings = {}) {
     .filter((item) => item.text && !isImageOrMarkupResidue(item.text));
 
   if (settings.platform === "wechat") {
+    if (Array.isArray(payload.wechatBubbles) && payload.wechatBubbles.length > 0) {
+      return parseWechatBubbleItems(items, payload.wechatBubbles);
+    }
     return parseWechatZhipuItems(items);
   }
 
