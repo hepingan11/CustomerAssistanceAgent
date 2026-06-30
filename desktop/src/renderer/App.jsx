@@ -531,7 +531,7 @@ function App() {
           <div className="messageList">
             {memory.messages.slice(-8).map((message) => (
               <div className={`messageItem ${message.senderType === "time" ? "timeItem" : ""}`} key={message.sourceMessageId}>
-                <span>{senderLabels[message.senderType] || message.senderType}</span>
+                <span>{message.senderName || senderLabels[message.senderType] || message.senderType}</span>
                 <p>{message.content}</p>
                 {showDebug && <DebugInfo debug={message.rawPayload?.sender_debug} />}
               </div>
@@ -572,6 +572,16 @@ function App() {
             <option value="telegram">Telegram</option>
           </select>
         </label>
+        {settings.platform === "wechat" && (
+          <label>
+            WeChat self name
+            <input
+              value={settings.wechatSelfName || ""}
+              onChange={(event) => setSettings({ ...settings, wechatSelfName: event.target.value })}
+              placeholder="Optional nickname for ME"
+            />
+          </label>
+        )}
         <label>
           OCR
           <select value={settings.ocrProvider} onChange={(event) => setSettings({ ...settings, ocrProvider: event.target.value })}>

@@ -63,15 +63,22 @@ The default model is `PaddleOCR-VL-1.6`, with these optional flags disabled:
 
 PaddleOCR-VL may include markdown or HTML image tags for avatars, emoji, and embedded pictures. The desktop parser strips markdown images, `<img>` blocks, HTML tags, image paths, and standalone time labels before creating chat messages.
 
-For chat screenshots, the parser also infers sender roles:
+For WeChat chat-record screenshots, the parser first tries the newer record-list layout:
+
+- same-row nickname + timestamp -> message header
+- text below that header, before the next header -> message content
+- nickname is saved as `senderName`
+- matching `wechatSelfName` -> `agent`; otherwise -> `customer`
+
+If the record-list layout cannot be detected, it falls back to the older chat-bubble layout:
 
 - Left-side message or avatar box -> `customer`
 - Right-side message or avatar box -> `agent`
 - Standalone timestamp -> `time`
 
-`time` events are kept in local memory for display, but they are not sent to the backend suggestion API.
+`time` events are kept in local memory for display, but they are not sent to the backend suggestion API. Record-list timestamps are saved on the message payload as `message_time`.
 
-Layout detection stays enabled because sender inference needs text or avatar coordinates. Pure OCR mode can return clean text, but it often does not include enough position data to distinguish left-side customer messages from right-side agent messages.
+Layout detection stays enabled because sender inference needs text, nickname, timestamp, or avatar coordinates. Pure OCR mode can return clean text, but it often does not include enough position data to distinguish record-list messages from unrelated UI text.
 
 For a local OCR deployment later, replace the provider implementation in `src/main/services/ocr-service.cjs`:
 
@@ -100,8 +107,8 @@ language_type=CHN_ENG
 probability=true
 ```
 
-Zhipu OCR returns `words_result[].location`, so sender inference uses text block coordinates directly:
+Zhipu OCR returns `words_result[].location`, so WeChat sender inference uses text block coordinates directly:
 
-- text block left of the inferred threshold -> `customer`
-- text block right of the inferred threshold -> `agent`
+- record-list nickname/timestamp rows are parsed first
+- if record-list parsing does not match, text block left/right threshold is used as fallback
 - timestamp-like text -> `time`

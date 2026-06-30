@@ -71,12 +71,18 @@ function cleanTextLine(value) {
 }
 
 function isTimeLikeText(value) {
-  const text = normalizeText(value);
+  const text = normalizeText(value).replace(/([:\uff1a])\s+(\d{2})/g, "$1$2");
   return (
-    /^\d{1,2}\s*[:：]\s*\d{2}(\s*[:：]\s*\d{2})?$/.test(text) ||
-    /^(昨天|今天|前天)\s*\d{1,2}\s*[:：]\s*\d{2}$/.test(text) ||
-    /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\s+\d{1,2}\s*[:：]\s*\d{2}$/.test(text)
+    /^\d{4}\s*\u5e74\s*\d{1,2}\s*\u6708\s*\d{1,2}\s*\u65e5\s*\d{1,2}\s*[:\uff1a]\s*\d{2}(\s*[:\uff1a]\s*\d{2})?$/.test(text) ||
+    /^\d{1,2}\s*\u6708\s*\d{1,2}\s*\u65e5\s*\d{1,2}\s*[:\uff1a]\s*\d{2}(\s*[:\uff1a]\s*\d{2})?$/.test(text) ||
+    /^\d{1,2}\s*[:\uff1a]\s*\d{2}(\s*[:\uff1a]\s*\d{2})?$/.test(text) ||
+    /^(\u6628\u5929|\u4eca\u5929|\u524d\u5929)\s*\d{1,2}\s*[:\uff1a]\s*\d{2}$/.test(text) ||
+    /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}\s+\d{1,2}\s*[:\uff1a]\s*\d{2}$/.test(text)
   );
+}
+
+function normalizeTimeText(value) {
+  return normalizeText(value).replace(/([:\uff1a])\s+(\d{2})/g, "$1$2");
 }
 
 function isImageOrMarkupResidue(value) {
@@ -172,6 +178,10 @@ function collectPositionedTextBlocks(node, blocks = [], seen = new WeakSet()) {
 
 function centerX(box) {
   return (Number(box.x1) + Number(box.x2)) / 2;
+}
+
+function centerY(box) {
+  return (Number(box.y1) + Number(box.y2)) / 2;
 }
 
 function boxArea(box) {
@@ -377,10 +387,10 @@ function buildMessagesFromEvents(events, payload, settings, status) {
   const now = new Date().toISOString();
 
   return events.map((event, index) => ({
-    sourceMessageId: hashText(`${settings.selectedSourceName}|${index}|${event.senderType}|${event.content}`),
+    sourceMessageId: hashText(`${settings.selectedSourceName}|${index}|${event.senderType}|${event.senderName || ""}|${event.timestamp || ""}|${event.content}`),
     platform: settings.platform || "generic",
     senderType: event.senderType || "unknown",
-    senderName: null,
+    senderName: event.senderName || null,
     content: event.content,
     capturedAt: now,
     rawPayload: {
@@ -388,6 +398,8 @@ function buildMessagesFromEvents(events, payload, settings, status) {
       region: settings.chatRegion,
       ocr_provider: settings.ocrProvider,
       ocr_status: status,
+      sender_name: event.senderName || null,
+      message_time: event.timestamp || null,
       event_type: event.eventType || "message"
       ,
       sender_debug: event.debug || null
@@ -474,6 +486,231 @@ function zhipuBox(location) {
   const height = Number(location.height);
   if (![left, top, width, height].every(Number.isFinite)) return null;
   return { x1: left, y1: top, x2: left + width, y2: top + height, width, height };
+}
+
+function isWechatRecordTitle(text) {
+  return /^(群聊的聊天记录|聊天记录|微信聊天记录)$/.test(normalizeText(text));
+}
+
+function isWechatRecordNoiseText(text) {
+  const value = normalizeText(text);
+  if (!value) return true;
+  if (isWechatRecordTitle(value)) return true;
+  if (/^[路.銆?_=涓€\-鈥攡|\\/:锛?锛?"鈥溾€濃€樷€檂]+$/.test(value)) return true;
+  if (/^[^\u4e00-\u9fa5a-zA-Z0-9]{1,4}$/.test(value)) return true;
+  return false;
+}
+
+function configuredSelfNames(settings = {}) {
+  return [
+    settings.wechatSelfName,
+    settings.agentName,
+    settings.selfName,
+    settings.currentUserName,
+    settings.userName
+  ]
+    .flatMap((value) => String(value || "").split(/[,\n，、/|]+/))
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+function senderTypeFromWechatRecordName(senderName, settings = {}) {
+  const normalizedName = normalizeText(senderName);
+  const selfNames = configuredSelfNames(settings);
+  return selfNames.some((name) => name === normalizedName) ? "agent" : "customer";
+}
+
+function joinWechatRecordParts(parts) {
+  return cleanTextLine(parts
+    .slice()
+    .sort((a, b) => a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1)
+    .map((part) => part.text)
+    .join(""));
+}
+
+function isSameHeaderRow(a, b) {
+  const aHeight = Math.max(1, Number(a.box.y2) - Number(a.box.y1));
+  const bHeight = Math.max(1, Number(b.box.y2) - Number(b.box.y1));
+  return Math.abs(centerY(a.box) - centerY(b.box)) <= Math.max(18, Math.min(32, Math.max(aHeight, bHeight) * 1.3));
+}
+
+function findWechatRecordHeaderName(timeItem, items) {
+  const candidates = items
+    .filter((item) => item !== timeItem)
+    .filter((item) => item.box && item.box.x1 < timeItem.box.x1 - 40)
+    .filter((item) => !isTimeLikeText(item.text) && !isWechatRecordNoiseText(item.text))
+    .filter((item) => isSameHeaderRow(item, timeItem))
+    .map((item) => ({
+      item,
+      score: Math.abs(centerY(item.box) - centerY(timeItem.box)) + Math.max(0, timeItem.box.x1 - item.box.x2) / 100
+    }))
+    .sort((a, b) => a.score - b.score);
+
+  return candidates[0]?.item || null;
+}
+
+function parseWechatRecordListItems(items, settings = {}, provider = "ocr") {
+  const useful = items
+    .filter((item) => item.box)
+    .map((item) => ({
+      ...item,
+      text: cleanTextLine(item.text)
+    }))
+    .filter((item) => item.text && !isImageOrMarkupResidue(item.text))
+    .sort((a, b) => a.box.y1 - b.box.y1 || a.box.x1 - b.box.x1);
+
+  const headerCandidates = useful
+    .filter((item) => isTimeLikeText(item.text))
+    .map((timeItem) => ({
+      timeItem,
+      nameItem: findWechatRecordHeaderName(timeItem, useful)
+    }))
+    .filter((header) => header.nameItem)
+    .sort((a, b) => a.timeItem.box.y1 - b.timeItem.box.y1 || a.nameItem.box.x1 - b.nameItem.box.x1);
+
+  if (headerCandidates.length === 0) return [];
+
+  const headerItems = new Set(headerCandidates.flatMap((header) => [header.timeItem, header.nameItem]));
+  const events = [];
+
+  headerCandidates.forEach((header, index) => {
+    const nextHeader = headerCandidates[index + 1];
+    const lowerY = Math.max(header.timeItem.box.y2, header.nameItem.box.y2) - 2;
+    const upperY = nextHeader ? Math.min(nextHeader.timeItem.box.y1, nextHeader.nameItem.box.y1) - 2 : Number.POSITIVE_INFINITY;
+    const minContentX = Math.max(0, header.nameItem.box.x1 - 10);
+    const maxContentX = Math.max(header.timeItem.box.x1 - 12, header.nameItem.box.x2 + 80);
+
+    const parts = useful
+      .filter((item) => !headerItems.has(item))
+      .filter((item) => item.box.y1 >= lowerY && item.box.y1 < upperY)
+      .filter((item) => item.box.x1 >= minContentX && item.box.x1 <= maxContentX)
+      .filter((item) => !isTimeLikeText(item.text) && !isWechatRecordNoiseText(item.text));
+
+    const content = joinWechatRecordParts(parts);
+    if (!content) return;
+
+    const senderName = cleanTextLine(header.nameItem.text);
+    const senderType = senderTypeFromWechatRecordName(senderName, settings);
+    const box = parts.reduce((merged, part) => (merged ? mergeBoxes(merged, part.box) : part.box), mergeBoxes(header.nameItem.box, header.timeItem.box));
+
+    events.push({
+      content,
+      senderType,
+      senderName,
+      timestamp: cleanTextLine(header.timeItem.text),
+      eventType: "message",
+      confidence: parts.find((part) => part.confidence != null)?.confidence ?? header.timeItem.confidence ?? header.nameItem.confidence ?? null,
+      box,
+      debug: {
+        provider,
+        platform: "wechat",
+        strategy: "record-list",
+        headerCount: headerCandidates.length,
+        senderName,
+        timestamp: cleanTextLine(header.timeItem.text),
+        contentPartCount: parts.length,
+        positionedBlockCount: useful.length
+      }
+    });
+  });
+
+  return events;
+}
+
+function isLikelyWechatRecordName(text) {
+  const value = normalizeText(text);
+  if (!value || isTimeLikeText(value) || isWechatRecordNoiseText(value)) return false;
+  if (value.length > 28) return false;
+  return true;
+}
+
+function parseWechatRecordText(markdown, settings = {}, provider = "ocr") {
+  const tokens = markdownToTokens(markdown).filter((token) => token.type === "text");
+  const lines = tokens
+    .map((token) => cleanTextLine(token.text))
+    .filter((line) => line && !isImageOrMarkupResidue(line))
+    .filter((line) => !isWechatRecordTitle(line));
+
+  const events = [];
+  let pendingName = "";
+  let current = null;
+
+  const flush = () => {
+    if (!current) return;
+    const content = cleanTextLine(current.parts.join(""));
+    if (content) {
+      const senderType = senderTypeFromWechatRecordName(current.senderName, settings);
+      events.push({
+        content,
+        senderType,
+        senderName: current.senderName,
+        timestamp: current.timestamp,
+        eventType: "message",
+        debug: {
+          provider,
+          platform: "wechat",
+          strategy: "record-text",
+          senderName: current.senderName,
+          timestamp: current.timestamp,
+          contentPartCount: current.parts.length,
+          positionedBlockCount: 0
+        }
+      });
+    }
+    current = null;
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const nextLine = lines[index + 1] || "";
+
+    if (isTimeLikeText(line)) {
+      if (pendingName) {
+        flush();
+        current = {
+          senderName: pendingName,
+          timestamp: normalizeTimeText(line),
+          parts: []
+        };
+        pendingName = "";
+      } else if (current && !current.timestamp) {
+        current.timestamp = normalizeTimeText(line);
+      }
+      continue;
+    }
+
+    if (isLikelyWechatRecordName(line)) {
+      const startsNextRecord = isTimeLikeText(nextLine);
+
+      if (current && current.parts.length > 0) {
+        if (startsNextRecord) {
+          flush();
+          pendingName = line;
+          continue;
+        }
+      }
+
+      if (current && current.parts.length === 0 && startsNextRecord) {
+        current = null;
+        pendingName = line;
+        continue;
+      }
+
+      if (!current && startsNextRecord) {
+        pendingName = line;
+        continue;
+      }
+    }
+
+    if (current) {
+      current.parts.push(line);
+    } else {
+      pendingName = isLikelyWechatRecordName(line) ? line : pendingName;
+    }
+  }
+
+  flush();
+  return events.length > 0 ? events : [];
 }
 
 function normalizeWechatBubble(value) {
@@ -603,6 +840,9 @@ function parseZhipuWordsResult(wordsResult, settings = {}, payload = {}) {
     .filter((item) => item.text && !isImageOrMarkupResidue(item.text));
 
   if (settings.platform === "wechat") {
+    const recordEvents = parseWechatRecordListItems(items, settings, "zhipuocr");
+    if (recordEvents.length > 0) return recordEvents;
+
     if (Array.isArray(payload.wechatBubbles) && payload.wechatBubbles.length > 0) {
       return parseWechatBubbleItems(items, payload.wechatBubbles);
     }
@@ -830,7 +1070,7 @@ async function fetchPaddleJsonl(resultData) {
   return text;
 }
 
-function parsePaddleJsonl(jsonl) {
+function parsePaddleJsonl(jsonl, settings = {}) {
   const pages = [];
   const blocks = [];
   const events = [];
@@ -845,7 +1085,17 @@ function parsePaddleJsonl(jsonl) {
     for (const result of results) {
       const markdown = result?.markdown?.text || "";
       const positionedBlocks = collectPositionedTextBlocks(result?.prunedResult || result);
-      const pageEvents = parseRecognizedEvents(markdown, positionedBlocks);
+      const positionedRecordEvents = settings.platform === "wechat"
+        ? parseWechatRecordListItems(positionedBlocks.map((block) => ({ ...block, confidence: null })), settings, "paddleocr")
+        : [];
+      const textRecordEvents = settings.platform === "wechat" && positionedRecordEvents.length === 0
+        ? parseWechatRecordText(markdown, settings, "paddleocr")
+        : [];
+      const pageEvents = positionedRecordEvents.length > 0
+        ? positionedRecordEvents
+        : textRecordEvents.length > 0
+          ? textRecordEvents
+          : parseRecognizedEvents(markdown, positionedBlocks);
 
       pages.push(markdown);
       events.push(...pageEvents);
@@ -855,9 +1105,11 @@ function parsePaddleJsonl(jsonl) {
           id: hashText(`${event.senderType}|${event.content}`),
           text: event.content,
           senderType: event.senderType,
+          senderName: event.senderName || null,
+          timestamp: event.timestamp || null,
           eventType: event.eventType,
           confidence: null,
-          bbox: null
+          bbox: event.box || null
         });
       }
     }
@@ -874,7 +1126,7 @@ async function analyzeWithPaddle(payload, settings) {
   const jobId = await submitPaddleJob(payload, settings);
   const resultData = await pollPaddleJob(jobId, settings);
   const jsonl = await fetchPaddleJsonl(resultData);
-  const parsed = parsePaddleJsonl(jsonl);
+  const parsed = parsePaddleJsonl(jsonl, settings);
   const messages = buildMessagesFromEvents(parsed.events, payload, settings, "done");
 
   return {

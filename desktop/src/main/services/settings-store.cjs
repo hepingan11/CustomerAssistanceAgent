@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
   zhipuToolType: "hand_write",
   zhipuLanguageType: "CHN_ENG",
   zhipuProbability: true,
+  wechatSelfName: "",
   platform: "generic"
 };
 
